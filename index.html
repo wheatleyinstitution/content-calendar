@@ -97,8 +97,8 @@
 
             const handleLogin = (e) => {
                 e.preventDefault();
-                // Check exact password match
-                if (passwordInput === TEAM_PASSWORD) {
+                // Check exact password match (trimming spaces just in case)
+                if (passwordInput.trim() === TEAM_PASSWORD) {
                     setIsAuthenticated(true);
                     setLoginError(false);
                     sessionStorage.setItem('calendar_auth', 'true');
