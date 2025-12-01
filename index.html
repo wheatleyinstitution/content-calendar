@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Team Content Calendar</title>
+    
+    <!-- Load React and Tailwind from the web (No installation needed!) -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <style>
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- CONFIGURATION ---
+        // CHANGE THIS PASSWORD to whatever you want your team to use!
+        const TEAM_PASSWORD = "team2024";
+
+        // --- ICONS ---
+        const Icon = ({ path, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {path}
+            </svg>
+        );
+
+        const ChevronLeft = (p) => <Icon {...p} path={<><path d="m15 18-6-6 6-6"/></>} />;
+        const ChevronRight = (p) => <Icon {...p} path={<><path d="m9 18 6-6-6-6"/></>} />;
+        const CalendarIcon = (p) => <Icon {...p} path={<><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></>} />;
+        const Instagram = (p) => <Icon {...p} path={<><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></>} />;
+        const Linkedin = (p) => <Icon {...p} path={<><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></>} />;
+        const Twitter = (p) => <Icon {...p} path={<><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></>} />;
+        const Video = (p) => <Icon {...p} path={<><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></>} />;
+        const FileText = (p) => <Icon {...p} path={<><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></>} />;
+        const Trash2 = (p) => <Icon {...p} path={<><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></>} />;
+        const X = (p) => <Icon {...p} path={<><path d="M18 6 6 18"/><path d="m6 6 12 12"/></>} />;
+        const CheckCircle2 = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>} />;
+        const Clock = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
+        const Lightbulb = (p) => <Icon {...p} path={<><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-1 1.5-2 1.5-3.5A6 6 0 0 0 6 8c0 1 .5 2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></>} />;
+        const Download = (p) => <Icon {...p} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>} />;
+        const Upload = (p) => <Icon {...p} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />;
+        const Save = (p) => <Icon {...p} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>} />;
+        const Lock = (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>} />;
+
+        // --- CONSTANTS ---
+        const MONTH_NAMES = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
+        ];
+
+        const PLATFORMS = [
+            { id: 'Instagram', icon: Instagram, color: 'text-pink-600', bg: 'bg-pink-100' },
+            { id: 'LinkedIn', icon: Linkedin, color: 'text-blue-700', bg: 'bg-blue-100' },
+            { id: 'TikTok', icon: Video, color: 'text-black', bg: 'bg-gray-200' },
+            { id: 'Twitter', icon: Twitter, color: 'text-sky-500', bg: 'bg-sky-100' },
+            { id: 'YouTube', icon: Video, color: 'text-red-600', bg: 'bg-red-100' },
+            { id: 'Other', icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100' }
+        ];
+
+        const STATUSES = [
+            { id: 'Idea', icon: Lightbulb, color: 'text-yellow-600', bg: 'bg-yellow-100' },
+            { id: 'Drafting', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-100' },
+            { id: 'Scheduled', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-100' },
+            { id: 'Published', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' }
+        ];
+
+        const TYPES = ['Static Image', 'Video/Reel', 'Carousel', 'Story', 'Text Post', 'Article'];
+        const INITIATIVES = ['Constitutional Government', 'Religion', 'Family'];
+
+        const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+        const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+
+        // --- MAIN APP ---
+        function SocialMediaCalendar() {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [passwordInput, setPasswordInput] = useState("");
+            const [loginError, setLoginError] = useState(false);
+
+            // Check if already logged in this session
+            useEffect(() => {
+                if (sessionStorage.getItem('calendar_auth') === 'true') {
+                    setIsAuthenticated(true);
+                }
+            }, []);
+
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (passwordInput === TEAM_PASSWORD) {
+                    setIsAuthenticated(true);
+                    setLoginError(false);
+                    sessionStorage.setItem('calendar_auth', 'true');
+                } else {
+                    setLoginError(true);
+                }
+            };
+
+            const [posts, setPosts] = useState([]);
+            const [currentDate, setCurrentDate] = useState(new Date());
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingPost, setEditingPost] = useState(null);
+
+            useEffect(() => {
+                const savedPosts = localStorage.getItem('calendar_posts');
+                if (savedPosts) {
+                    try { setPosts(JSON.parse(savedPosts)); } catch (e) { console.error(e); }
+                }
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('calendar_posts', JSON.stringify(posts));
+            }, [posts]);
+
+            const exportDataFile = () => {
+                const dataStr = JSON.stringify(posts, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `calendar_backup_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            const importDataFile = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const loadedPosts = JSON.parse(e.target.result);
+                        if (Array.isArray(loadedPosts)) {
+                            if(confirm("This will replace your current calendar with the file data. Are you sure?")) {
+                                setPosts(loadedPosts);
+                            }
+                        } else { alert("Invalid file format."); }
+                    } catch (error) { alert("Error reading file."); }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const exportToCSV = () => {
+                const headers = ['Date', 'Description', 'Platform', 'Type', 'Initiative', 'Status'];
+                const csvRows = posts.map(post => {
+                const safeDescription = `"${post.description.replace(/"/g, '""')}"`;
+                return [post.date, safeDescription, post.platform, post.type, post.initiative, post.status].join(',');
+                });
+                const csvString = [headers.join(','), ...csvRows].join('\n');
+                const blob = new Blob([csvString], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `content_calendar_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            };
+
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const daysInMonth = getDaysInMonth(year, month);
+            const firstDay = getFirstDayOfMonth(year, month);
+
+            const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+            const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+            const goToToday = () => setCurrentDate(new Date());
+
+            const handleDayClick = (day) => {
+                const clickedDate = new Date(year, month, day);
+                clickedDate.setMinutes(clickedDate.getMinutes() - clickedDate.getTimezoneOffset());
+                setSelectedDate(clickedDate);
+                setEditingPost(null);
+                setIsModalOpen(true);
+            };
+
+            const handleEditClick = (e, post) => {
+                e.stopPropagation();
+                setEditingPost(post);
+                const [y, m, d] = post.date.split('-').map(Number);
+                setSelectedDate(new Date(y, m - 1, d));
+                setIsModalOpen(true);
+            };
+
+            const handleDelete = (postId) => {
+                setPosts(prev => prev.filter(p => p.id !== postId));
+                setIsModalOpen(false);
+            };
+
+            const savePost = (formData) => {
+                if (editingPost) {
+                    setPosts(prev => prev.map(p => p.id === editingPost.id ? { ...formData, id: p.id } : p));
+                } else {
+                    const newPost = { ...formData, id: crypto.randomUUID() };
+                    setPosts(prev => [...prev, newPost]);
+                }
+                setIsModalOpen(false);
+            };
+
+            // --- LOGIN SCREEN ---
+            if (!isAuthenticated) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-screen bg-slate-50 font-sans p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100 text-center">
+                            <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
+                                <Lock className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Team Access</h2>
+                            <p className="text-slate-500 mb-6 text-sm">Please enter the team password to view the calendar.</p>
+                            
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input 
+                                    type="password" 
+                                    value={passwordInput}
+                                    onChange={(e) => setPasswordInput(e.target.value)}
+                                    placeholder="Enter password"
+                                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                                    autoFocus
+                                />
+                                {loginError && <p className="text-red-500 text-xs font-medium">Incorrect password. Please try again.</p>}
+                                <button 
+                                    type="submit"
+                                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all"
+                                >
+                                    Unlock Calendar
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            // --- MAIN CALENDAR RENDER ---
+            const renderCalendarDays = () => {
+                const days = [];
+                for (let i = 0; i < firstDay; i++) {
+                    days.push(<div key={`empty-${i}`} className="h-24 md:h-32 bg-slate-50 border border-slate-100"></div>);
+                }
+                for (let day = 1; day <= daysInMonth; day++) {
+                    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                    const dayPosts = posts.filter(p => p.date === dateStr);
+                    const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
+
+                    days.push(
+                        <div key={day} onClick={() => handleDayClick(day)} className={`min-h-[6rem] md:min-h-[8rem] border border-slate-200 p-1 md:p-2 transition-colors hover:bg-slate-50 cursor-pointer overflow-hidden ${isToday ? 'bg-blue-50/50' : 'bg-white'}`}>
+                            <div className="flex justify-between items-start mb-1">
+                                <span className={`text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}`}>{day}</span>
+                            </div>
+                            <div className="space-y-1">
+                                {dayPosts.map(post => {
+                                    const platform = PLATFORMS.find(p => p.id === post.platform) || PLATFORMS[5];
+                                    const status = STATUSES.find(s => s.id === post.status) || STATUSES[0];
+                                    return (
+                                        <div key={post.id} onClick={(e) => handleEditClick(e, post)} className={`group text-xs p-1.5 rounded border border-slate-100 shadow-sm ${platform.bg} hover:shadow-md transition-all truncate flex items-center gap-1.5`}>
+                                            <platform.icon className={`w-3 h-3 flex-shrink-0 ${platform.color}`} />
+                                            <span className="font-medium truncate flex-1">{post.description}</span>
+                                            <div className={`w-2 h-2 rounded-full ${status.color.replace('text', 'bg')}`} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                }
+                return days;
+            };
+
+            return (
+                <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900">
+                    <header className="bg-white border-b border-slate-200 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm z-10">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-200"><CalendarIcon className="w-6 h-6 text-white" /></div>
+                            <div className="flex flex-col">
+                                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-500 bg-clip-text text-transparent">My Content Calendar</h1>
+                                <span className="text-xs font-medium text-slate-500">Offline Mode • Protected</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-lg">
+                            <button onClick={prevMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronLeft className="w-5 h-5" /></button>
+                            <span className="text-lg font-semibold w-36 text-center text-slate-700">{MONTH_NAMES[month]} {year}</span>
+                            <button onClick={nextMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
+                        </div>
+                        <div className="flex gap-2">
+                             <label className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer" title="Load a backup file">
+                                <Upload className="w-4 h-4" /> Load
+                                <input type="file" onChange={importDataFile} className="hidden" accept=".json" />
+                            </label>
+                            <button onClick={exportDataFile} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"><Save className="w-4 h-4" /> Save</button>
+                            <button onClick={exportToCSV} className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors border border-emerald-200"><Download className="w-4 h-4" /> CSV</button>
+                            <button onClick={goToToday} className="hidden md:block px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">Today</button>
+                        </div>
+                    </header>
+                    <div className="grid grid-cols-7 bg-white border-b border-slate-200 shadow-sm">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">{day}</div>)}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 md:p-6">
+                        <div className="grid grid-cols-7 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">{renderCalendarDays()}</div>
+                    </div>
+                    {isModalOpen && <PostModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} date={selectedDate} post={editingPost} onSave={savePost} onDelete={handleDelete} />}
+                </div>
+            );
+        }
+
+        function PostModal({ isOpen, onClose, date, post, onSave, onDelete }) {
+            if (!isOpen) return null;
+            const dateStr = date ? date.toISOString().split('T')[0] : '';
+            const [formData, setFormData] = React.useState({
+                date: dateStr, description: '', platform: 'Instagram', type: 'Static Image', initiative: 'Constitutional Government', status: 'Idea'
+            });
+
+            React.useEffect(() => {
+                if (post) setFormData(post);
+                else setFormData(prev => ({ ...prev, date: dateStr }));
+            }, [post, dateStr]);
+
+            const handleSubmit = (e) => { e.preventDefault(); onSave(formData); };
+
+            return (
+                <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <h2 className="text-lg font-bold text-slate-800">{post ? 'Edit Post' : 'New Post'}</h2>
+                            <button onClick={onClose} className="p-1 hover:bg-slate-200 rounded-full transition-colors"><X className="w-5 h-5 text-slate-500" /></button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                            <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Date</label><input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" /></div>
+                            <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Content Description</label><textarea required rows={3} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none" /></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Platform</label><select value={formData.platform} onChange={e => setFormData({...formData, platform: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">{PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.id}</option>)}</select></div>
+                                <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Status</label><select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">{STATUSES.map(s => <option key={s.id} value={s.id}>{s.id}</option>)}</select></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Type</label><select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">{TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+                                <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Initiative</label><select value={formData.initiative} onChange={e => setFormData({...formData, initiative: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white">{INITIATIVES.map(i => <option key={i} value={i}>{i}</option>)}</select></div>
+                            </div>
+                            <div className="pt-4 flex items-center justify-between gap-3">
+                                {post && <button type="button" onClick={() => onDelete(post.id)} className="px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors flex items-center gap-2"><Trash2 className="w-4 h-4" /> Delete</button>}
+                                <div className="flex gap-3 ml-auto"><button type="button" onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">Cancel</button><button type="submit" className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all">{post ? 'Update' : 'Add Post'}</button></div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SocialMediaCalendar />);
+    </script>
+</body>
+</html>
