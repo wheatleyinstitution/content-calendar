@@ -28,10 +28,9 @@
 
         // --- ⚠️ CONFIGURATION ⚠️ ---
         // 1. Your Google Script Web App URL (Linked to your Sheet)
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyx9oydgisGW2OFnX1jcQ-MiL08RXH2CGkKWxBsJhy_V_f5682DjvxOCKINWQCoseb-/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwazPjy7HhMremWPrfE8UKsyb8eWdNCwJCESKxcrnAMCGPYMz2sV1e0VRhM/exec"; 
         
         // 2. Your Team Password (optional)
-        // Leave empty "" to disable password protection
         const TEAM_PASSWORD = "";
 
         // --- ICONS ---
@@ -200,7 +199,7 @@
                 setIsModalOpen(false);
             };
 
-            // --- LOGIN SCREEN (Disabled) ---
+            // --- LOGIN SCREEN ---
             if (!isAuthenticated) {
                 return (
                     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 font-sans p-4">
