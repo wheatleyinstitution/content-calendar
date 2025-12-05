@@ -118,8 +118,9 @@
                 if (!GOOGLE_SCRIPT_URL.startsWith("http")) return;
                 setIsLoading(true);
                 
-                // Use Proxy URL
-                const fetchUrl = CORS_PROXY + encodeURIComponent(GOOGLE_SCRIPT_URL);
+                // Use Proxy URL + TIMESTAMP to prevent caching (The Fix!)
+                const timestamp = new Date().getTime();
+                const fetchUrl = CORS_PROXY + encodeURIComponent(GOOGLE_SCRIPT_URL + "?t=" + timestamp);
 
                 try {
                     const response = await fetch(fetchUrl);
@@ -146,14 +147,18 @@
                 setPosts(newPosts); // Optimistic update
                 if (!GOOGLE_SCRIPT_URL.startsWith("http")) return;
                 
-                const postUrl = CORS_PROXY + encodeURIComponent(GOOGLE_SCRIPT_URL);
+                // Add timestamp to POST as well just in case
+                const timestamp = new Date().getTime();
+                const postUrl = CORS_PROXY + encodeURIComponent(GOOGLE_SCRIPT_URL + "?t=" + timestamp);
 
                 try {
                     await fetch(postUrl, {
                         method: "POST",
                         body: JSON.stringify(newPosts)
                     });
-                    fetchPosts(); // Refresh to confirm
+                    // Refresh data after save to ensure sync
+                    // We wait a tiny bit to ensure Google Sheets has finished processing
+                    setTimeout(() => fetchPosts(), 500); 
                 } catch (err) {
                     console.error("Save error:", err);
                     setError("Failed to save changes to cloud.");
