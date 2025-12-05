@@ -1,641 +1,414 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Plus, 
-  Trash2, 
-  FileText, 
-  Save, 
-  Loader2, 
-  AlertCircle,
-  X,
-  Calendar as CalendarIcon,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Layout,
-  Image as ImageIcon,
-  Video,
-  Smartphone,
-  Hash,
-  Instagram,
-  Youtube,
-  Linkedin,
-  Twitter,
-  CheckCircle,
-  Circle,
-  Clock as ClockIcon,
-  Send,
-  Tag
-} from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  onAuthStateChanged,
-  signInWithCustomToken
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
-  updateDoc, 
-  onSnapshot,
-  query,
-  where
-} from 'firebase/firestore';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Productivity Hub</title>
+  
+  <!-- 1. Styles (Tailwind CSS) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 2. The Translators (React & Babel) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- 3. Icon Font Fix -->
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800">
+  
+  <!-- This is where the app will appear -->
+  <div id="root"></div>
 
-// --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+  <!-- 4. The Application Logic -->
+  <script type="text/babel" data-type="module">
+    // --- IMPORTS (Using CDN versions for HTML compatibility) ---
+    import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+    import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+    import { 
+      Plus, Trash2, FileText, Save, Loader2, AlertCircle, X,
+      Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock,
+      Layout, Image as ImageIcon, Video, Smartphone, Hash,
+      Instagram, Youtube, Linkedin, Twitter, Tag
+    } from 'https://esm.sh/lucide-react@0.294.0';
+    
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+    import { 
+      getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+    import { 
+      getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query 
+    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
-// ==========================================
-// CONFIGURATION & CONSTANTS
-// ==========================================
-const PLATFORMS = [
-  { id: 'instagram', label: 'Instagram', icon: Instagram, color: 'text-pink-600' },
-  { id: 'tiktok', label: 'TikTok', icon: Video, color: 'text-black' },
-  { id: 'youtube', label: 'YouTube', icon: Youtube, color: 'text-red-600' },
-  { id: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'text-blue-700' },
-  { id: 'twitter', label: 'X / Twitter', icon: Twitter, color: 'text-slate-800' },
-  { id: 'other', label: 'Other', icon: Hash, color: 'text-slate-500' },
-];
+    // --- SMART BACKEND SYSTEM ---
+    // This allows the app to work BOTH in the Chat (using Firebase) 
+    // AND on your website (using LocalStorage) without crashing.
+    
+    let db, auth, appId, user = null;
+    let isOfflineMode = false;
 
-const TYPES = [
-  { id: 'post', label: 'Post', icon: ImageIcon },
-  { id: 'reel', label: 'Reel', icon: Smartphone },
-  { id: 'story', label: 'Story', icon: ClockIcon },
-  { id: 'video', label: 'Video', icon: Video },
-  { id: 'carousel', label: 'Carousel', icon: Layout },
-];
+    try {
+      if (typeof window.__firebase_config !== 'undefined') {
+        // We are in the chat environment -> Use Firebase
+        const firebaseConfig = JSON.parse(window.__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        appId = window.__app_id || 'default-app-id';
+      } else {
+        throw new Error("No config");
+      }
+    } catch (e) {
+      // We are on your website -> Use LocalStorage Fallback
+      console.log("Running in Offline/LocalStorage Mode");
+      isOfflineMode = true;
+      user = { uid: "local-user" }; // Mock user
+    }
 
-const STATUSES = [
-  { id: 'idea', label: 'Idea', color: 'bg-slate-100 text-slate-600 border-slate-200' },
-  { id: 'draft', label: 'Draft', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-  { id: 'ready', label: 'Ready', color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { id: 'published', label: 'Published', color: 'bg-green-100 text-green-700 border-green-200' },
-];
-
-// ==========================================
-// MAIN APP SHELL
-// ==========================================
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('calendar'); // 'calendar' or 'sheets'
-
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth failed:", err);
+    // --- MOCK DATABASE FUNCTIONS (For LocalStorage) ---
+    const localDb = {
+      get: (path) => JSON.parse(localStorage.getItem(path) || '[]'),
+      set: (path, data) => {
+        localStorage.setItem(path, JSON.stringify(data));
+        window.dispatchEvent(new Event('storage-' + path));
       }
     };
-    initAuth();
 
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (!u) setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
+    // Helper to mimic Firebase 'onSnapshot' with LocalStorage
+    const useDataListener = (collectionName, callback) => {
+      useEffect(() => {
+        if (isOfflineMode) {
+          const path = `productivity-hub-${collectionName}`;
+          const load = () => {
+            const data = localDb.get(path);
+            // Mimic Firebase snapshot structure
+            callback({ docs: data.map(item => ({ id: item.id, data: () => item })) });
+          };
+          
+          load(); // Initial load
+          window.addEventListener('storage-' + path, load);
+          return () => window.removeEventListener('storage-' + path, load);
+        } else {
+          // Real Firebase Listener
+          if (!auth?.currentUser) return;
+          const q = query(collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName));
+          return onSnapshot(q, callback);
+        }
+      }, [auth?.currentUser, collectionName]);
+    };
 
-  if (loading && !user) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-50 text-slate-400">
-        <Loader2 className="w-8 h-8 animate-spin" />
-      </div>
-    );
-  }
+    // Helper to mimic 'addDoc'
+    const addData = async (collectionName, data) => {
+      if (isOfflineMode) {
+        const path = `productivity-hub-${collectionName}`;
+        const current = localDb.get(path);
+        const newItem = { ...data, id: 'local-' + Date.now() };
+        localDb.set(path, [newItem, ...current]);
+        return { id: newItem.id };
+      } else {
+        return addDoc(collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName), data);
+      }
+    };
 
-  return (
-    <div className="flex h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden">
-      {/* --- Sidebar Navigation --- */}
-      <div className="w-16 md:w-20 bg-indigo-900 flex flex-col items-center py-6 gap-6 z-20 shadow-lg shrink-0">
-        <div className="p-2 bg-indigo-800 rounded-xl mb-4">
-          <Layout className="w-6 h-6 text-indigo-300" />
-        </div>
-
-        <NavButton 
-          active={currentView === 'calendar'} 
-          onClick={() => setCurrentView('calendar')}
-          icon={<CalendarIcon className="w-6 h-6" />}
-          label="Calendar"
-        />
-        
-        <NavButton 
-          active={currentView === 'sheets'} 
-          onClick={() => setCurrentView('sheets')}
-          icon={<FileText className="w-6 h-6" />}
-          label="Sheets"
-        />
-      </div>
-
-      {/* --- Main Content Area --- */}
-      <div className="flex-1 flex overflow-hidden relative">
-        {currentView === 'calendar' ? (
-          <CalendarModule user={user} />
-        ) : (
-          <SheetsModule user={user} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NavButton({ active, onClick, icon, label }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        flex flex-col items-center justify-center w-full py-3 gap-1 transition-all
-        ${active ? 'text-white border-r-4 border-indigo-400 bg-indigo-800/50' : 'text-indigo-400 hover:text-indigo-200 hover:bg-indigo-800/30'}
-      `}
-    >
-      {icon}
-      <span className="text-[10px] font-medium">{label}</span>
-    </button>
-  );
-}
-
-// ==========================================
-// MODULE 1: CONTENT CALENDAR
-// ==========================================
-function CalendarModule({ user }) {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [events, setEvents] = useState([]);
-  const [selectedDay, setSelectedDay] = useState(null);
-  
-  // Form State
-  const [formState, setFormState] = useState({
-    title: "",
-    description: "",
-    platform: "instagram",
-    type: "post",
-    status: "idea",
-    initiative: "",
-    time: "12:00"
-  });
-  
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Sync Events
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'users', user.uid, 'events'));
+    // Helper to mimic 'deleteDoc'
+    const deleteData = async (collectionName, id) => {
+      if (isOfflineMode) {
+        const path = `productivity-hub-${collectionName}`;
+        const current = localDb.get(path);
+        localDb.set(path, current.filter(item => item.id !== id));
+      } else {
+        await deleteDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName, id));
+      }
+    };
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setEvents(loadedEvents);
-    });
-    return () => unsubscribe();
-  }, [user]);
+    // Helper to mimic 'updateDoc'
+    const updateData = async (collectionName, id, data) => {
+       if (isOfflineMode) {
+        const path = `productivity-hub-${collectionName}`;
+        const current = localDb.get(path);
+        const updated = current.map(item => item.id === id ? { ...item, ...data } : item);
+        localDb.set(path, updated);
+      } else {
+        await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName, id), data);
+      }
+    };
 
-  // Calendar Logic
-  const getDaysInMonth = (date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const days = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    return { days, firstDay };
-  };
+    // ==========================================
+    // CONFIGURATION CONSTANTS
+    // ==========================================
+    const PLATFORMS = [
+      { id: 'instagram', label: 'Instagram', icon: Instagram, color: 'text-pink-600' },
+      { id: 'tiktok', label: 'TikTok', icon: Video, color: 'text-black' },
+      { id: 'youtube', label: 'YouTube', icon: Youtube, color: 'text-red-600' },
+      { id: 'linkedin', label: 'LinkedIn', icon: Linkedin, color: 'text-blue-700' },
+      { id: 'twitter', label: 'X / Twitter', icon: Twitter, color: 'text-slate-800' },
+      { id: 'other', label: 'Other', icon: Hash, color: 'text-slate-500' },
+    ];
 
-  const { days, firstDay } = getDaysInMonth(currentDate);
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const TYPES = [
+      { id: 'post', label: 'Post', icon: ImageIcon },
+      { id: 'reel', label: 'Reel', icon: Smartphone },
+      { id: 'story', label: 'Story', icon: Clock },
+      { id: 'video', label: 'Video', icon: Video },
+      { id: 'carousel', label: 'Carousel', icon: Layout },
+    ];
 
-  const changeMonth = (offset) => {
-    const newDate = new Date(currentDate.setMonth(currentDate.getMonth() + offset));
-    setCurrentDate(new Date(newDate));
-  };
+    const STATUSES = [
+      { id: 'idea', label: 'Idea', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+      { id: 'draft', label: 'Draft', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+      { id: 'ready', label: 'Ready', color: 'bg-blue-100 text-blue-700 border-blue-200' },
+      { id: 'published', label: 'Published', color: 'bg-green-100 text-green-700 border-green-200' },
+    ];
 
-  const handleInputChange = (field, value) => {
-    setFormState(prev => ({ ...prev, [field]: value }));
-  };
+    // ==========================================
+    // MAIN COMPONENT
+    // ==========================================
+    function App() {
+      const [currentUser, setCurrentUser] = useState(isOfflineMode ? { uid: 'local' } : null);
+      const [loading, setLoading] = useState(!isOfflineMode);
+      const [currentView, setCurrentView] = useState('calendar');
 
-  const handleAddEvent = async (e) => {
-    e.preventDefault();
-    if (!formState.title.trim() || !selectedDay || !user) return;
-    
-    setIsSaving(true);
-    try {
-      // Construct date with time
-      const [hours, minutes] = formState.time.split(':');
-      const eventDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
-      eventDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      useEffect(() => {
+        if (!isOfflineMode) {
+          const initAuth = async () => {
+             if (window.__initial_auth_token) {
+                await signInWithCustomToken(auth, window.__initial_auth_token);
+             } else {
+                await signInAnonymously(auth);
+             }
+          };
+          initAuth();
+          return onAuthStateChanged(auth, (u) => {
+            setCurrentUser(u);
+            setLoading(false);
+          });
+        }
+      }, []);
 
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), {
-        ...formState,
-        date: eventDate.toISOString(),
-        createdAt: Date.now()
-      });
-      
-      // Reset form (keep some defaults for ease of use)
-      setFormState({
-        title: "",
-        description: "",
-        platform: "instagram",
-        type: "post",
-        status: "idea",
-        initiative: "",
-        time: "12:00"
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      if (loading) return <div className="h-screen flex items-center justify-center text-slate-400"><Loader2 className="animate-spin w-8 h-8" /></div>;
 
-  const handleDeleteEvent = async (id) => {
-    if (!confirm("Delete this event?")) return;
-    try {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', id));
-    } catch (err) { console.error(err); }
-  };
-
-  const getEventsForDay = (dayNum) => {
-    return events.filter(e => {
-      const d = new Date(e.date);
-      return d.getDate() === dayNum && 
-             d.getMonth() === currentDate.getMonth() && 
-             d.getFullYear() === currentDate.getFullYear();
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
-  };
-
-  return (
-    <div className="flex-1 flex flex-col h-full bg-slate-50">
-      {/* Header */}
-      <div className="p-6 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-800">
-          {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-        </h2>
-        <div className="flex gap-2">
-          <button onClick={() => changeMonth(-1)} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft className="w-5 h-5 text-slate-600" /></button>
-          <button onClick={() => changeMonth(1)} className="p-2 hover:bg-slate-100 rounded-full"><ChevronRight className="w-5 h-5 text-slate-600" /></button>
-        </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Calendar Grid */}
-        <div className="flex-1 p-6 overflow-y-auto">
-          <div className="grid grid-cols-7 gap-4 mb-4 text-center">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-              <div key={d} className="text-sm font-semibold text-slate-400 uppercase tracking-wider">{d}</div>
-            ))}
+      return (
+        <div className="flex h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden">
+          {/* Sidebar */}
+          <div className="w-16 md:w-20 bg-indigo-900 flex flex-col items-center py-6 gap-6 z-20 shadow-lg shrink-0">
+            <div className="p-2 bg-indigo-800 rounded-xl mb-4">
+              <Layout className="w-6 h-6 text-indigo-300" />
+            </div>
+            <NavButton active={currentView === 'calendar'} onClick={() => setCurrentView('calendar')} icon={<CalendarIcon className="w-6 h-6" />} label="Calendar" />
+            <NavButton active={currentView === 'sheets'} onClick={() => setCurrentView('sheets')} icon={<FileText className="w-6 h-6" />} label="Sheets" />
           </div>
-          <div className="grid grid-cols-7 gap-2 md:gap-4 auto-rows-fr">
-            {[...Array(firstDay)].map((_, i) => <div key={`empty-${i}`} />)}
-            
-            {[...Array(days)].map((_, i) => {
-              const dayNum = i + 1;
-              const dayEvents = getEventsForDay(dayNum);
-              const isSelected = selectedDay === dayNum;
-              const isToday = 
-                dayNum === new Date().getDate() && 
-                currentDate.getMonth() === new Date().getMonth() &&
-                currentDate.getFullYear() === new Date().getFullYear();
 
-              return (
-                <div 
-                  key={dayNum}
-                  onClick={() => setSelectedDay(dayNum)}
-                  className={`
-                    min-h-[120px] p-2 rounded-xl border transition-all cursor-pointer relative group flex flex-col gap-1
-                    ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 bg-white shadow-md' : 'border-slate-200 bg-white hover:border-indigo-300'}
-                    ${isToday ? 'bg-indigo-50/30' : ''}
-                  `}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <span className={`
-                      text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full
-                      ${isToday ? 'bg-indigo-600 text-white' : 'text-slate-500'}
-                    `}>
-                      {dayNum}
-                    </span>
+          {/* Main Area */}
+          <div className="flex-1 flex overflow-hidden relative">
+            {currentView === 'calendar' ? <CalendarModule /> : <SheetsModule />}
+          </div>
+          
+          {isOfflineMode && (
+             <div className="absolute bottom-4 right-4 bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full border border-orange-200 shadow-sm z-50">
+               Offline Mode (Local Storage)
+             </div>
+          )}
+        </div>
+      );
+    }
+
+    function NavButton({ active, onClick, icon, label }) {
+      return (
+        <button onClick={onClick} className={`flex flex-col items-center justify-center w-full py-3 gap-1 transition-all ${active ? 'text-white border-r-4 border-indigo-400 bg-indigo-800/50' : 'text-indigo-400 hover:text-indigo-200 hover:bg-indigo-800/30'}`}>
+          {icon}
+          <span className="text-[10px] font-medium">{label}</span>
+        </button>
+      );
+    }
+
+    // ==========================================
+    // MODULE 1: CALENDAR
+    // ==========================================
+    function CalendarModule() {
+      const [currentDate, setCurrentDate] = useState(new Date());
+      const [events, setEvents] = useState([]);
+      const [selectedDay, setSelectedDay] = useState(null);
+      const [formState, setFormState] = useState({ title: "", description: "", platform: "instagram", type: "post", status: "idea", initiative: "", time: "12:00" });
+      const [isSaving, setIsSaving] = useState(false);
+
+      // Unified Data Listener
+      useDataListener('events', (snapshot) => {
+        const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setEvents(loaded);
+      });
+
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      const getDaysInMonth = (date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        return { days: new Date(year, month + 1, 0).getDate(), firstDay: new Date(year, month, 1).getDay() };
+      };
+      const { days, firstDay } = getDaysInMonth(currentDate);
+
+      const handleAddEvent = async (e) => {
+        e.preventDefault();
+        if (!formState.title.trim() || !selectedDay) return;
+        setIsSaving(true);
+        const [h, m] = formState.time.split(':');
+        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
+        d.setHours(parseInt(h), parseInt(m));
+        
+        await addData('events', { ...formState, date: d.toISOString(), createdAt: Date.now() });
+        setFormState({ title: "", description: "", platform: "instagram", type: "post", status: "idea", initiative: "", time: "12:00" });
+        setIsSaving(false);
+      };
+
+      const getEventsForDay = (dayNum) => {
+        return events.filter(e => {
+          const d = new Date(e.date);
+          return d.getDate() === dayNum && d.getMonth() === currentDate.getMonth() && d.getFullYear() === currentDate.getFullYear();
+        }).sort((a, b) => new Date(a.date) - new Date(b.date));
+      };
+
+      return (
+        <div className="flex-1 flex flex-col h-full bg-slate-50">
+          {/* Header */}
+          <div className="p-6 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm">
+            <h2 className="text-2xl font-bold text-slate-800">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft className="w-5 h-5" /></button>
+              <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronRight className="w-5 h-5" /></button>
+            </div>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* Grid */}
+            <div className="flex-1 p-6 overflow-y-auto">
+              <div className="grid grid-cols-7 gap-4 mb-4 text-center">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="text-sm font-semibold text-slate-400 uppercase">{d}</div>)}
+              </div>
+              <div className="grid grid-cols-7 gap-2 md:gap-4 auto-rows-fr">
+                {[...Array(firstDay)].map((_, i) => <div key={`empty-${i}`} />)}
+                {[...Array(days)].map((_, i) => {
+                  const dayNum = i + 1;
+                  const dayEvents = getEventsForDay(dayNum);
+                  const isSelected = selectedDay === dayNum;
+                  return (
+                    <div key={dayNum} onClick={() => setSelectedDay(dayNum)} className={`min-h-[120px] p-2 rounded-xl border transition-all cursor-pointer relative group flex flex-col gap-1 ${isSelected ? 'ring-2 ring-indigo-500 border-indigo-500 bg-white shadow-md' : 'border-slate-200 bg-white hover:border-indigo-300'}`}>
+                      <span className={`text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full ${dayNum === new Date().getDate() && currentDate.getMonth() === new Date().getMonth() ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>{dayNum}</span>
+                      <div className="flex-1 flex flex-col gap-1 overflow-hidden">
+                        {dayEvents.slice(0, 3).map(ev => {
+                           const platform = PLATFORMS.find(p => p.id === ev.platform) || PLATFORMS[5];
+                           const status = STATUSES.find(s => s.id === ev.status) || STATUSES[0];
+                           const Icon = platform.icon;
+                           return <div key={ev.id} className={`text-[10px] truncate px-1.5 py-1 rounded border flex items-center gap-1 ${status.color} bg-opacity-50`}><Icon className={`w-3 h-3 ${platform.color}`} /><span className="truncate">{ev.title}</span></div>
+                        })}
+                        {dayEvents.length > 3 && <div className="text-[10px] text-slate-400 pl-1">+{dayEvents.length - 3} more</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Sidebar */}
+            <div className={`w-96 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 absolute right-0 top-0 bottom-0 md:relative flex flex-col ${selectedDay ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden'}`}>
+              {selectedDay && (
+                <>
+                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                    <h3 className="font-bold text-slate-700">{monthNames[currentDate.getMonth()]} {selectedDay}</h3>
+                    <button onClick={() => setSelectedDay(null)} className="md:hidden p-1 hover:bg-slate-200 rounded"><X className="w-4 h-4" /></button>
                   </div>
-                  
-                  {/* Event Badges in Grid */}
-                  <div className="flex-1 flex flex-col gap-1 overflow-hidden">
-                    {dayEvents.slice(0, 3).map(ev => {
+                  <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+                    {getEventsForDay(selectedDay).map(ev => {
                       const platform = PLATFORMS.find(p => p.id === ev.platform) || PLATFORMS[5];
                       const status = STATUSES.find(s => s.id === ev.status) || STATUSES[0];
-                      const PlatformIcon = platform.icon;
-                      
+                      const PIcon = platform.icon;
                       return (
-                        <div key={ev.id} className={`
-                          text-[10px] truncate px-1.5 py-1 rounded border flex items-center gap-1.5
-                          ${status.color} bg-opacity-50
-                        `}>
-                          <PlatformIcon className={`w-3 h-3 ${platform.color}`} />
-                          <span className="truncate font-medium">{ev.title}</span>
+                        <div key={ev.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+                          <div className="flex justify-between mb-2">
+                             <div className="flex items-center gap-2"><PIcon className={`w-4 h-4 ${platform.color}`} /><span className="text-xs font-bold uppercase">{platform.label}</span></div>
+                             <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${status.color}`}>{status.label}</div>
+                          </div>
+                          <h4 className="font-semibold text-slate-800 text-sm mb-1">{ev.title}</h4>
+                          <div className="flex items-center gap-3 text-xs text-slate-500 mb-2"><div className="flex items-center gap-1"><Clock className="w-3 h-3"/>{ev.time}</div></div>
+                          {ev.description && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded mb-2">{ev.description}</p>}
+                          <div className="flex justify-end pt-1"><button onClick={() => deleteData('events', ev.id)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button></div>
                         </div>
                       );
                     })}
-                    {dayEvents.length > 3 && (
-                      <div className="text-[10px] text-slate-400 pl-1">+{dayEvents.length - 3} more</div>
-                    )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Sidebar for Selected Day */}
-        <div className={`
-          w-96 bg-white border-l border-slate-200 shadow-xl z-10 transition-transform duration-300 absolute right-0 top-0 bottom-0 md:relative flex flex-col
-          ${selectedDay ? 'translate-x-0' : 'translate-x-full md:translate-x-0 md:w-0 md:overflow-hidden'}
-        `}>
-          {selectedDay && (
-            <>
-              {/* Day Header */}
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-                <h3 className="font-bold text-slate-700">
-                  {monthNames[currentDate.getMonth()]} {selectedDay}
-                </h3>
-                <button onClick={() => setSelectedDay(null)} className="md:hidden p-1 hover:bg-slate-200 rounded">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              
-              {/* Event List */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-                {getEventsForDay(selectedDay).length === 0 ? (
-                  <div className="text-center py-10 opacity-50">
-                    <CalendarIcon className="w-12 h-12 mx-auto mb-2 text-slate-300" />
-                    <p className="text-sm text-slate-500">No content scheduled.</p>
-                  </div>
-                ) : (
-                  getEventsForDay(selectedDay).map(ev => {
-                    const platform = PLATFORMS.find(p => p.id === ev.platform) || PLATFORMS[5];
-                    const type = TYPES.find(t => t.id === ev.type) || TYPES[0];
-                    const status = STATUSES.find(s => s.id === ev.status) || STATUSES[0];
-                    const PlatformIcon = platform.icon;
-                    const TypeIcon = type.icon;
-
-                    return (
-                      <div key={ev.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all">
-                        {/* Card Header */}
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex items-center gap-2">
-                            <PlatformIcon className={`w-4 h-4 ${platform.color}`} />
-                            <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{platform.label}</span>
-                          </div>
-                          <div className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${status.color}`}>
-                            {status.label}
-                          </div>
-                        </div>
-
-                        <h4 className="font-semibold text-slate-800 text-sm mb-1">{ev.title}</h4>
-                        
-                        {/* Meta Row */}
-                        <div className="flex items-center gap-3 text-xs text-slate-500 mb-2">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> {ev.time}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TypeIcon className="w-3 h-3" /> {type.label}
-                          </div>
-                        </div>
-
-                        {ev.initiative && (
-                          <div className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] mb-2 font-medium">
-                            <Hash className="w-2.5 h-2.5" />
-                            {ev.initiative}
-                          </div>
-                        )}
-
-                        {ev.description && (
-                          <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded mb-2 border border-slate-100">
-                            {ev.description}
-                          </p>
-                        )}
-                        
-                        <div className="flex justify-end pt-1">
-                           <button onClick={() => handleDeleteEvent(ev.id)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 transition-colors">
-                            <Trash2 className="w-3 h-3" /> Delete
-                          </button>
-                        </div>
+                  <div className="p-4 border-t border-slate-200 bg-white">
+                    <form onSubmit={handleAddEvent} className="flex flex-col gap-3">
+                      <input value={formState.title} onChange={e => setFormState({...formState, title: e.target.value})} placeholder="Title" className="w-full px-3 py-2 text-sm border rounded-lg" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <select value={formState.platform} onChange={e => setFormState({...formState, platform: e.target.value})} className="text-xs px-2 py-2 border rounded-lg">{PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
+                        <select value={formState.status} onChange={e => setFormState({...formState, status: e.target.value})} className="text-xs px-2 py-2 border rounded-lg">{STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select>
                       </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Add Event Form */}
-              <div className="p-4 border-t border-slate-200 bg-white">
-                <form onSubmit={handleAddEvent} className="flex flex-col gap-3">
-                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">New Content</div>
-                  
-                  <input
-                    type="text"
-                    value={formState.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
-                    placeholder="Content Title"
-                    className="w-full px-3 py-2 text-sm border border-slate-200 bg-slate-50 rounded-lg focus:outline-none focus:border-indigo-500 focus:bg-white transition-all"
-                  />
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <select 
-                      value={formState.platform}
-                      onChange={(e) => handleInputChange('platform', e.target.value)}
-                      className="text-xs px-2 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-indigo-500"
-                    >
-                      {PLATFORMS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-                    </select>
-
-                    <select 
-                      value={formState.type}
-                      onChange={(e) => handleInputChange('type', e.target.value)}
-                      className="text-xs px-2 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-indigo-500"
-                    >
-                      {TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                    </select>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="time" value={formState.time} onChange={e => setFormState({...formState, time: e.target.value})} className="text-xs px-2 py-2 border rounded-lg" />
+                        <input value={formState.initiative} onChange={e => setFormState({...formState, initiative: e.target.value})} placeholder="Initiative" className="text-xs px-2 py-2 border rounded-lg" />
+                      </div>
+                      <textarea value={formState.description} onChange={e => setFormState({...formState, description: e.target.value})} placeholder="Description" rows={2} className="w-full px-3 py-2 text-xs border rounded-lg" />
+                      <button type="submit" disabled={isSaving} className="w-full p-2 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700">{isSaving ? 'Saving...' : 'Add Content'}</button>
+                    </form>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <select 
-                      value={formState.status}
-                      onChange={(e) => handleInputChange('status', e.target.value)}
-                      className="text-xs px-2 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-indigo-500"
-                    >
-                      {STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
-                    </select>
-                    
-                    <input 
-                      type="time" 
-                      value={formState.time}
-                      onChange={e => handleInputChange('time', e.target.value)}
-                      className="text-xs px-2 py-2 border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-2 border border-slate-200 rounded-lg bg-slate-50 px-2">
-                    <Tag className="w-3 h-3 text-slate-400" />
-                    <input
-                      type="text"
-                      value={formState.initiative}
-                      onChange={(e) => handleInputChange('initiative', e.target.value)}
-                      placeholder="Initiative / Campaign"
-                      className="w-full py-2 text-xs bg-transparent focus:outline-none"
-                    />
-                  </div>
-                  
-                  <textarea
-                    value={formState.description}
-                    onChange={(e) => handleInputChange('description', e.target.value)}
-                    placeholder="Description or Caption..."
-                    rows={2}
-                    className="w-full px-3 py-2 text-xs border border-slate-200 bg-slate-50 rounded-lg focus:outline-none focus:border-indigo-500 resize-none focus:bg-white"
-                  />
-                  
-                  <button 
-                    type="submit" 
-                    disabled={isSaving}
-                    className="w-full p-2 bg-indigo-600 text-white font-medium text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 shadow-sm flex items-center justify-center gap-2"
-                  >
-                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : <><Plus className="w-4 h-4" /> Add Content</>}
-                  </button>
-                </form>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// MODULE 2: SHEETS (Standard)
-// ==========================================
-function SheetsModule({ user }) {
-  const [sheets, setSheets] = useState([]);
-  const [activeSheetId, setActiveSheetId] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    const collectionRef = collection(db, 'artifacts', appId, 'users', user.uid, 'sheets');
-    const unsubscribe = onSnapshot(collectionRef, (snapshot) => {
-      const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      fetched.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      setSheets(fetched);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user]);
-
-  const handleCreate = async () => {
-    if (!user) return;
-    setIsSaving(true);
-    try {
-      const docRef = await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'sheets'), {
-        title: "Untitled Sheet",
-        content: "",
-        createdAt: Date.now(),
-        updatedAt: Date.now()
-      });
-      setActiveSheetId(docRef.id);
-    } catch (e) { console.error(e); } 
-    finally { setIsSaving(false); }
-  };
-
-  const handleUpdate = async (id, field, value) => {
-    setSheets(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s));
-    try {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'sheets', id), {
-        [field]: value,
-        updatedAt: Date.now()
-      });
-    } catch (e) { console.error(e); }
-  };
-
-  const handleDelete = async (e, id) => {
-    e.stopPropagation();
-    if (!confirm("Delete this sheet?")) return;
-    if (activeSheetId === id) setActiveSheetId(null);
-    try { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'sheets', id)); } 
-    catch (e) { console.error(e); }
-  };
-
-  const activeSheet = sheets.find(s => s.id === activeSheetId);
-
-  return (
-    <div className="flex-1 flex h-full">
-      <div className={`
-        flex-col w-full md:w-72 bg-white border-r border-slate-200 z-10
-        ${activeSheetId ? 'hidden md:flex' : 'flex'}
-      `}>
-        <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-          <h2 className="font-bold text-slate-700">My Sheets</h2>
-          <button onClick={handleCreate} disabled={isSaving} className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200">
-            <Plus className="w-5 h-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {sheets.map(sheet => (
-            <div 
-              key={sheet.id}
-              onClick={() => setActiveSheetId(sheet.id)}
-              className={`
-                group p-3 rounded-lg border cursor-pointer relative transition-all
-                ${activeSheetId === sheet.id ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-transparent hover:bg-slate-50'}
-              `}
-            >
-              <h3 className="font-medium text-sm text-slate-800 truncate pr-6">{sheet.title || "Untitled"}</h3>
-              <p className="text-xs text-slate-400 mt-1 truncate">{sheet.content || "Empty"}</p>
-              <button 
-                onClick={(e) => handleDelete(e, sheet.id)}
-                className="absolute right-2 top-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+                </>
+              )}
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`
-        flex-1 flex flex-col bg-white
-        ${!activeSheetId ? 'hidden md:flex' : 'flex'}
-      `}>
-        {activeSheet ? (
-          <>
-            <div className="md:hidden p-2 border-b flex items-center gap-2">
-              <button onClick={() => setActiveSheetId(null)}><ChevronLeft className="w-6 h-6 text-slate-500" /></button>
-              <span className="font-medium">Edit Sheet</span>
-            </div>
-            <div className="p-6 md:p-10 max-w-3xl mx-auto w-full flex-1 flex flex-col">
-              <input
-                value={activeSheet.title}
-                onChange={(e) => handleUpdate(activeSheet.id, 'title', e.target.value)}
-                placeholder="Title"
-                className="text-3xl font-bold border-none focus:outline-none mb-4 placeholder:text-slate-300"
-              />
-              <textarea
-                value={activeSheet.content}
-                onChange={(e) => handleUpdate(activeSheet.id, 'content', e.target.value)}
-                placeholder="Start typing..."
-                className="flex-1 resize-none border-none focus:outline-none text-lg leading-relaxed text-slate-600 placeholder:text-slate-300"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-slate-300">
-            <p>Select a sheet</p>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // MODULE 2: SHEETS
+    // ==========================================
+    function SheetsModule() {
+      const [sheets, setSheets] = useState([]);
+      const [activeSheetId, setActiveSheetId] = useState(null);
+
+      useDataListener('sheets', (snapshot) => {
+        const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setSheets(loaded.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)));
+      });
+
+      const handleCreate = async () => {
+        const res = await addData('sheets', { title: "Untitled", content: "", createdAt: Date.now() });
+        setActiveSheetId(res.id);
+      };
+
+      const handleUpdate = async (id, field, value) => {
+        setSheets(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s)); // Optimistic
+        await updateData('sheets', id, { [field]: value, updatedAt: Date.now() });
+      };
+
+      const activeSheet = sheets.find(s => s.id === activeSheetId);
+
+      return (
+        <div className="flex-1 flex h-full">
+          <div className={`flex-col w-full md:w-72 bg-white border-r border-slate-200 z-10 ${activeSheetId ? 'hidden md:flex' : 'flex'}`}>
+            <div className="p-4 border-b flex justify-between items-center"><h2 className="font-bold text-slate-700">My Sheets</h2><button onClick={handleCreate} className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg"><Plus className="w-5 h-5"/></button></div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {sheets.map(s => (
+                <div key={s.id} onClick={() => setActiveSheetId(s.id)} className={`group p-3 rounded-lg border cursor-pointer relative ${activeSheetId === s.id ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-transparent'}`}>
+                  <h3 className="font-medium text-sm truncate pr-6">{s.title || "Untitled"}</h3>
+                  <button onClick={(e) => { e.stopPropagation(); deleteData('sheets', s.id); if(activeSheetId===s.id) setActiveSheetId(null); }} className="absolute right-2 top-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4"/></button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={`flex-1 flex flex-col bg-white ${!activeSheetId ? 'hidden md:flex' : 'flex'}`}>
+            {activeSheet ? (
+               <div className="p-6 md:p-10 max-w-3xl mx-auto w-full flex-1 flex flex-col">
+                  <div className="md:hidden mb-4"><button onClick={() => setActiveSheetId(null)} className="flex items-center text-slate-500"><ChevronLeft className="w-4 h-4"/> Back</button></div>
+                  <input value={activeSheet.title} onChange={e => handleUpdate(activeSheet.id, 'title', e.target.value)} className="text-3xl font-bold border-none focus:outline-none mb-4" placeholder="Title" />
+                  <textarea value={activeSheet.content} onChange={e => handleUpdate(activeSheet.id, 'content', e.target.value)} className="flex-1 resize-none border-none focus:outline-none text-lg leading-relaxed text-slate-600" placeholder="Type here..." />
+               </div>
+            ) : <div className="flex-1 flex items-center justify-center text-slate-300">Select a sheet</div>}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
