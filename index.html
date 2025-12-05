@@ -28,6 +28,7 @@
 
         // --- ⚠️ CONFIGURATION ⚠️ ---
         // 1. Your Google Script Web App URL (Linked to your Sheet)
+        // VERIFIED URL IS NOW CORRECT IN THIS FILE
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwazPjy7HhMremWPrfE8UKsyb8eWdNCwJCESKxcrnAMCGPYMz2sV1e0VRhM/exec"; 
         
         // 2. Your Team Password (optional)
@@ -118,11 +119,13 @@
                         setPosts(data);
                         setError(null);
                     } else if (data.status === "error") {
+                        // Handle error response from script
                         throw new Error(data.message);
                     }
                 } catch (err) {
                     console.error("Fetch error:", err);
-                    setError("Could not load data from Google Sheets. Check script permissions.");
+                    // The error displayed to the user
+                    setError("Could not load data from Google Sheets. Check script permissions or the deployment URL.");
                 } finally {
                     setIsLoading(false);
                 }
@@ -138,6 +141,8 @@
                         method: "POST",
                         body: JSON.stringify(newPosts)
                     });
+                    // After successful save, refresh to confirm (optional but good practice)
+                    fetchPosts(); 
                 } catch (err) {
                     console.error("Save error:", err);
                     setError("Failed to save changes to cloud.");
