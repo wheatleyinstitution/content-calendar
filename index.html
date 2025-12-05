@@ -23,115 +23,89 @@
 
   <!-- 4. The Application Logic -->
   <script type="text/babel" data-type="module">
-    // --- IMPORTS (Using CDN versions for HTML compatibility) ---
+    // --- IMPORTS ---
     import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
     import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
     import { 
       Plus, Trash2, FileText, Save, Loader2, AlertCircle, X,
       Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock,
       Layout, Image as ImageIcon, Video, Smartphone, Hash,
-      Instagram, Youtube, Linkedin, Twitter, Tag
+      Instagram, Youtube, Linkedin, Twitter, Tag, RefreshCw
     } from 'https://esm.sh/lucide-react@0.294.0';
+
+    // ==========================================
+    // ⚠️ CONFIGURATION: YOUR BACKEND URL
+    // ==========================================
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw4zthRzV2SMUyiJc-S6LlAJsL1y2Mdlky74d-9rrvNfyqfXCYstD0N36VarD1LDw7-/exec";
+
+    // --- API CLIENT ---
+    // Connects to your Google Sheet instead of Firebase
     
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-    import { 
-      getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
-    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-    import { 
-      getFirestore, collection, addDoc, deleteDoc, doc, updateDoc, onSnapshot, query 
-    } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-
-    // --- SMART BACKEND SYSTEM ---
-    // This allows the app to work BOTH in the Chat (using Firebase) 
-    // AND on your website (using LocalStorage) without crashing.
-    
-    let db, auth, appId, user = null;
-    let isOfflineMode = false;
-
-    try {
-      if (typeof window.__firebase_config !== 'undefined') {
-        // We are in the chat environment -> Use Firebase
-        const firebaseConfig = JSON.parse(window.__firebase_config);
-        const app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-        appId = window.__app_id || 'default-app-id';
-      } else {
-        throw new Error("No config");
-      }
-    } catch (e) {
-      // We are on your website -> Use LocalStorage Fallback
-      console.log("Running in Offline/LocalStorage Mode");
-      isOfflineMode = true;
-      user = { uid: "local-user" }; // Mock user
-    }
-
-    // --- MOCK DATABASE FUNCTIONS (For LocalStorage) ---
-    const localDb = {
-      get: (path) => JSON.parse(localStorage.getItem(path) || '[]'),
-      set: (path, data) => {
-        localStorage.setItem(path, JSON.stringify(data));
-        window.dispatchEvent(new Event('storage-' + path));
-      }
-    };
-
-    // Helper to mimic Firebase 'onSnapshot' with LocalStorage
-    const useDataListener = (collectionName, callback) => {
-      useEffect(() => {
-        if (isOfflineMode) {
-          const path = `productivity-hub-${collectionName}`;
-          const load = () => {
-            const data = localDb.get(path);
-            // Mimic Firebase snapshot structure
-            callback({ docs: data.map(item => ({ id: item.id, data: () => item })) });
-          };
-          
-          load(); // Initial load
-          window.addEventListener('storage-' + path, load);
-          return () => window.removeEventListener('storage-' + path, load);
-        } else {
-          // Real Firebase Listener
-          if (!auth?.currentUser) return;
-          const q = query(collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName));
-          return onSnapshot(q, callback);
+    const api = {
+      // Fetch data
+      read: async (type) => {
+        if (GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) return [];
+        try {
+          const response = await fetch(`${GOOGLE_SCRIPT_URL}?action=read&type=${type}`);
+          const json = await response.json();
+          return json.status === 'success' ? json.data : [];
+        } catch (e) {
+          console.error("Fetch error", e);
+          return [];
         }
-      }, [auth?.currentUser, collectionName]);
+      },
+
+      // Add data (Uses POST with 'text/plain' to avoid CORS preflight issues in GAS)
+      create: async (type, data) => {
+        if (GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) return { id: Date.now() };
+        const id = Date.now().toString();
+        
+        await fetch(`${GOOGLE_SCRIPT_URL}?action=create&type=${type}`, {
+          method: 'POST',
+          body: JSON.stringify({ data: { id, ...data } })
+        });
+        return { id };
+      },
+
+      // Delete data
+      delete: async (type, id) => {
+        if (GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) return;
+        await fetch(`${GOOGLE_SCRIPT_URL}?action=delete&type=${type}`, {
+          method: 'POST',
+          body: JSON.stringify({ id })
+        });
+      },
+
+      // Update data
+      update: async (type, id, updates) => {
+        if (GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) return;
+        await fetch(`${GOOGLE_SCRIPT_URL}?action=update&type=${type}`, {
+          method: 'POST',
+          body: JSON.stringify({ id, data: updates })
+        });
+      }
     };
 
-    // Helper to mimic 'addDoc'
-    const addData = async (collectionName, data) => {
-      if (isOfflineMode) {
-        const path = `productivity-hub-${collectionName}`;
-        const current = localDb.get(path);
-        const newItem = { ...data, id: 'local-' + Date.now() };
-        localDb.set(path, [newItem, ...current]);
-        return { id: newItem.id };
-      } else {
-        return addDoc(collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName), data);
-      }
-    };
+    // --- HOOK FOR DATA ---
+    const useSharedData = (type, refreshCount) => {
+      const [data, setData] = useState([]);
+      const [loading, setLoading] = useState(true);
 
-    // Helper to mimic 'deleteDoc'
-    const deleteData = async (collectionName, id) => {
-      if (isOfflineMode) {
-        const path = `productivity-hub-${collectionName}`;
-        const current = localDb.get(path);
-        localDb.set(path, current.filter(item => item.id !== id));
-      } else {
-        await deleteDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName, id));
-      }
-    };
-    
-    // Helper to mimic 'updateDoc'
-    const updateData = async (collectionName, id, data) => {
-       if (isOfflineMode) {
-        const path = `productivity-hub-${collectionName}`;
-        const current = localDb.get(path);
-        const updated = current.map(item => item.id === id ? { ...item, ...data } : item);
-        localDb.set(path, updated);
-      } else {
-        await updateDoc(doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, collectionName, id), data);
-      }
+      useEffect(() => {
+        let mounted = true;
+        const load = async () => {
+          setLoading(true);
+          const result = await api.read(type);
+          if (mounted) {
+            setData(result);
+            setLoading(false);
+          }
+        };
+        load();
+        return () => { mounted = false; };
+      }, [type, refreshCount]);
+
+      return { data, loading, setData };
     };
 
     // ==========================================
@@ -165,28 +139,23 @@
     // MAIN COMPONENT
     // ==========================================
     function App() {
-      const [currentUser, setCurrentUser] = useState(isOfflineMode ? { uid: 'local' } : null);
-      const [loading, setLoading] = useState(!isOfflineMode);
       const [currentView, setCurrentView] = useState('calendar');
-
-      useEffect(() => {
-        if (!isOfflineMode) {
-          const initAuth = async () => {
-             if (window.__initial_auth_token) {
-                await signInWithCustomToken(auth, window.__initial_auth_token);
-             } else {
-                await signInAnonymously(auth);
-             }
-          };
-          initAuth();
-          return onAuthStateChanged(auth, (u) => {
-            setCurrentUser(u);
-            setLoading(false);
-          });
-        }
-      }, []);
-
-      if (loading) return <div className="h-screen flex items-center justify-center text-slate-400"><Loader2 className="animate-spin w-8 h-8" /></div>;
+      
+      if (GOOGLE_SCRIPT_URL.includes("PASTE_YOUR")) {
+         return (
+           <div className="h-screen flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+             <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+             <h1 className="text-xl font-bold text-slate-800 mb-2">Setup Required</h1>
+             <p className="text-slate-600 max-w-md">
+               To make this calendar shared, you need to connect it to Google Sheets.
+               <br/><br/>
+               1. Create a Google Apps Script deployment.<br/>
+               2. Copy the Web App URL.<br/>
+               3. Paste it into the <code>GOOGLE_SCRIPT_URL</code> variable in the code.
+             </p>
+           </div>
+         );
+      }
 
       return (
         <div className="flex h-screen bg-slate-100 font-sans text-slate-800 overflow-hidden">
@@ -203,12 +172,6 @@
           <div className="flex-1 flex overflow-hidden relative">
             {currentView === 'calendar' ? <CalendarModule /> : <SheetsModule />}
           </div>
-          
-          {isOfflineMode && (
-             <div className="absolute bottom-4 right-4 bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full border border-orange-200 shadow-sm z-50">
-               Offline Mode (Local Storage)
-             </div>
-          )}
         </div>
       );
     }
@@ -226,17 +189,15 @@
     // MODULE 1: CALENDAR
     // ==========================================
     function CalendarModule() {
+      const [refreshCount, setRefreshCount] = useState(0);
+      const { data: events, loading, setData: setEvents } = useSharedData('events', refreshCount);
+      
       const [currentDate, setCurrentDate] = useState(new Date());
-      const [events, setEvents] = useState([]);
       const [selectedDay, setSelectedDay] = useState(null);
       const [formState, setFormState] = useState({ title: "", description: "", platform: "instagram", type: "post", status: "idea", initiative: "", time: "12:00" });
       const [isSaving, setIsSaving] = useState(false);
 
-      // Unified Data Listener
-      useDataListener('events', (snapshot) => {
-        const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        setEvents(loaded);
-      });
+      const triggerRefresh = () => setRefreshCount(c => c + 1);
 
       const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
       const getDaysInMonth = (date) => {
@@ -254,9 +215,21 @@
         const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), selectedDay);
         d.setHours(parseInt(h), parseInt(m));
         
-        await addData('events', { ...formState, date: d.toISOString(), createdAt: Date.now() });
+        // Optimistic UI
+        const optimisticEvent = { ...formState, id: 'temp-' + Date.now(), date: d.toISOString(), createdAt: Date.now() };
+        setEvents(prev => [...prev, optimisticEvent]);
+
+        await api.create('events', { ...formState, date: d.toISOString(), createdAt: Date.now() });
+        
         setFormState({ title: "", description: "", platform: "instagram", type: "post", status: "idea", initiative: "", time: "12:00" });
         setIsSaving(false);
+        triggerRefresh(); // Sync with real DB ID
+      };
+
+      const handleDelete = async (id) => {
+         if(!confirm("Delete?")) return;
+         setEvents(prev => prev.filter(e => e.id !== id)); // Optimistic
+         await api.delete('events', id);
       };
 
       const getEventsForDay = (dayNum) => {
@@ -271,9 +244,11 @@
           {/* Header */}
           <div className="p-6 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm">
             <h2 className="text-2xl font-bold text-slate-800">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2>
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {loading && <Loader2 className="w-4 h-4 animate-spin text-indigo-500 mr-2" />}
               <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() - 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronLeft className="w-5 h-5" /></button>
               <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth() + 1)))} className="p-2 hover:bg-slate-100 rounded-full"><ChevronRight className="w-5 h-5" /></button>
+              <button onClick={triggerRefresh} className="p-2 hover:bg-slate-100 rounded-full" title="Refresh Data"><RefreshCw className="w-4 h-4 text-slate-500" /></button>
             </div>
           </div>
 
@@ -329,7 +304,7 @@
                           <h4 className="font-semibold text-slate-800 text-sm mb-1">{ev.title}</h4>
                           <div className="flex items-center gap-3 text-xs text-slate-500 mb-2"><div className="flex items-center gap-1"><Clock className="w-3 h-3"/>{ev.time}</div></div>
                           {ev.description && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded mb-2">{ev.description}</p>}
-                          <div className="flex justify-end pt-1"><button onClick={() => deleteData('events', ev.id)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button></div>
+                          <div className="flex justify-end pt-1"><button onClick={() => handleDelete(ev.id)} className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1"><Trash2 className="w-3 h-3" /> Delete</button></div>
                         </div>
                       );
                     })}
@@ -361,22 +336,36 @@
     // MODULE 2: SHEETS
     // ==========================================
     function SheetsModule() {
-      const [sheets, setSheets] = useState([]);
+      const [refreshCount, setRefreshCount] = useState(0);
+      const { data: sheets, loading, setData: setSheets } = useSharedData('sheets', refreshCount);
       const [activeSheetId, setActiveSheetId] = useState(null);
-
-      useDataListener('sheets', (snapshot) => {
-        const loaded = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        setSheets(loaded.sort((a,b) => (b.createdAt||0) - (a.createdAt||0)));
-      });
+      
+      const triggerRefresh = () => setRefreshCount(c => c + 1);
 
       const handleCreate = async () => {
-        const res = await addData('sheets', { title: "Untitled", content: "", createdAt: Date.now() });
-        setActiveSheetId(res.id);
+        const tempId = 'temp-'+Date.now();
+        const newSheet = { id: tempId, title: "Untitled", content: "", createdAt: Date.now() };
+        setSheets(prev => [newSheet, ...prev]);
+        setActiveSheetId(tempId);
+        
+        const res = await api.create('sheets', { title: "Untitled", content: "", createdAt: Date.now() });
+        // In real app, we'd replace tempId with res.id, but triggering refresh is easier for MVP
+        triggerRefresh();
       };
 
       const handleUpdate = async (id, field, value) => {
         setSheets(prev => prev.map(s => s.id === id ? { ...s, [field]: value } : s)); // Optimistic
-        await updateData('sheets', id, { [field]: value, updatedAt: Date.now() });
+        
+        // Debounce could be added here, but direct update for MVP
+        await api.update('sheets', id, { [field]: value, updatedAt: Date.now() });
+      };
+
+      const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if(!confirm("Delete?")) return;
+        setSheets(prev => prev.filter(s => s.id !== id));
+        if(activeSheetId === id) setActiveSheetId(null);
+        await api.delete('sheets', id);
       };
 
       const activeSheet = sheets.find(s => s.id === activeSheetId);
@@ -384,12 +373,19 @@
       return (
         <div className="flex-1 flex h-full">
           <div className={`flex-col w-full md:w-72 bg-white border-r border-slate-200 z-10 ${activeSheetId ? 'hidden md:flex' : 'flex'}`}>
-            <div className="p-4 border-b flex justify-between items-center"><h2 className="font-bold text-slate-700">My Sheets</h2><button onClick={handleCreate} className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg"><Plus className="w-5 h-5"/></button></div>
+            <div className="p-4 border-b flex justify-between items-center">
+               <h2 className="font-bold text-slate-700">My Sheets</h2>
+               <div className="flex gap-2">
+                 <button onClick={triggerRefresh} className="p-1.5 hover:bg-slate-100 rounded-lg"><RefreshCw className="w-4 h-4 text-slate-500"/></button>
+                 <button onClick={handleCreate} className="p-1.5 bg-indigo-100 text-indigo-700 rounded-lg"><Plus className="w-5 h-5"/></button>
+               </div>
+            </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {loading && <div className="text-center p-4 text-slate-400 text-sm">Loading...</div>}
               {sheets.map(s => (
                 <div key={s.id} onClick={() => setActiveSheetId(s.id)} className={`group p-3 rounded-lg border cursor-pointer relative ${activeSheetId === s.id ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-transparent'}`}>
                   <h3 className="font-medium text-sm truncate pr-6">{s.title || "Untitled"}</h3>
-                  <button onClick={(e) => { e.stopPropagation(); deleteData('sheets', s.id); if(activeSheetId===s.id) setActiveSheetId(null); }} className="absolute right-2 top-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4"/></button>
+                  <button onClick={(e) => handleDelete(e, s.id)} className="absolute right-2 top-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100"><Trash2 className="w-4 h-4"/></button>
                 </div>
               ))}
             </div>
