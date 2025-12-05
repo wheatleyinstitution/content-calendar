@@ -5,18 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Team Content Calendar</title>
     
-    <!-- Load React and Tailwind from the web (No installation needed!) -->
+    <!-- Load React and Tailwind -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <style>
-        /* Custom scrollbar for a cleaner look */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -24,6 +25,14 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
+
+        // --- ⚠️ CONFIGURATION ⚠️ ---
+        // 1. Your Google Script Web App URL (Linked to your Sheet)
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyG_RfOudzCLaq-9oIKbejm_yq3_x97tGZGMyO-gbo8Yl04oWDwNlnhChgkKHbRX8_x/exec"; 
+        
+        // 2. Your Team Password (optional, but good for privacy)
+        // Leave empty "" to disable password protection
+        const TEAM_PASSWORD = "";
 
         // --- ICONS ---
         const Icon = ({ path, className }) => (
@@ -45,16 +54,12 @@
         const CheckCircle2 = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></>} />;
         const Clock = (p) => <Icon {...p} path={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>} />;
         const Lightbulb = (p) => <Icon {...p} path={<><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-1 1.5-2 1.5-3.5A6 6 0 0 0 6 8c0 1 .5 2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></>} />;
-        const Download = (p) => <Icon {...p} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>} />;
-        const Upload = (p) => <Icon {...p} path={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></>} />;
-        const Save = (p) => <Icon {...p} path={<><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></>} />;
+        const RefreshCw = (p) => <Icon {...p} path={<><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></>} />;
+        const Cloud = (p) => <Icon {...p} path={<><path d="M17.5 19c0-1.7-1.3-3-3-3h-1.1c-.1-2.6-2.2-4.7-4.8-4.7-2.3 0-4.2 1.7-4.7 4-2.4.3-4.2 2.3-4.2 4.7 0 2.8 2.2 5 5 5h10.3c1.5 0 2.7-1.2 2.7-2.7"/></>} />;
+        const Lock = (p) => <Icon {...p} path={<><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></>} />;
 
         // --- CONSTANTS ---
-        const MONTH_NAMES = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"
-        ];
-
+        const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         const PLATFORMS = [
             { id: 'Instagram', icon: Instagram, color: 'text-pink-600', bg: 'bg-pink-100' },
             { id: 'LinkedIn', icon: Linkedin, color: 'text-blue-700', bg: 'bg-blue-100' },
@@ -63,14 +68,12 @@
             { id: 'YouTube', icon: Video, color: 'text-red-600', bg: 'bg-red-100' },
             { id: 'Other', icon: FileText, color: 'text-gray-600', bg: 'bg-gray-100' }
         ];
-
         const STATUSES = [
             { id: 'Idea', icon: Lightbulb, color: 'text-yellow-600', bg: 'bg-yellow-100' },
             { id: 'Drafting', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-100' },
             { id: 'Scheduled', icon: Clock, color: 'text-purple-600', bg: 'bg-purple-100' },
             { id: 'Published', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-100' }
         ];
-
         const TYPES = ['Static Image', 'Video/Reel', 'Carousel', 'Story', 'Text Post', 'Article'];
         const INITIATIVES = ['Constitutional Government', 'Religion', 'Family'];
 
@@ -79,68 +82,77 @@
 
         // --- MAIN APP ---
         function SocialMediaCalendar() {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [passwordInput, setPasswordInput] = useState("");
+            const [loginError, setLoginError] = useState(false);
+            
+            // App State
             const [posts, setPosts] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+            
+            // Calendar State
             const [currentDate, setCurrentDate] = useState(new Date());
             const [selectedDate, setSelectedDate] = useState(null);
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingPost, setEditingPost] = useState(null);
 
+            // 1. Check Auth on Load
             useEffect(() => {
-                const savedPosts = localStorage.getItem('calendar_posts');
-                if (savedPosts) {
-                    try { setPosts(JSON.parse(savedPosts)); } catch (e) { console.error(e); }
+                if (TEAM_PASSWORD === "") {
+                    setIsAuthenticated(true);
+                    fetchPosts();
+                } else if (sessionStorage.getItem('calendar_auth') === 'true') {
+                    setIsAuthenticated(true);
+                    fetchPosts();
                 }
             }, []);
 
-            useEffect(() => {
-                localStorage.setItem('calendar_posts', JSON.stringify(posts));
-            }, [posts]);
-
-            const exportDataFile = () => {
-                const dataStr = JSON.stringify(posts, null, 2);
-                const blob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `calendar_backup_${new Date().toISOString().split('T')[0]}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            // 2. Fetch from Google Sheets
+            const fetchPosts = async () => {
+                if (!GOOGLE_SCRIPT_URL.startsWith("http")) return;
+                setIsLoading(true);
+                try {
+                    const response = await fetch(GOOGLE_SCRIPT_URL);
+                    const data = await response.json();
+                    if (Array.isArray(data)) {
+                        setPosts(data);
+                        setError(null);
+                    }
+                } catch (err) {
+                    console.error("Fetch error:", err);
+                    setError("Could not load data from Google Sheets.");
+                } finally {
+                    setIsLoading(false);
+                }
             };
 
-            const importDataFile = (event) => {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    try {
-                        const loadedPosts = JSON.parse(e.target.result);
-                        if (Array.isArray(loadedPosts)) {
-                            if(confirm("This will replace your current calendar with the file data. Are you sure?")) {
-                                setPosts(loadedPosts);
-                            }
-                        } else { alert("Invalid file format."); }
-                    } catch (error) { alert("Error reading file."); }
-                };
-                reader.readAsText(file);
-                event.target.value = '';
+            // 3. Save to Google Sheets (We save the ENTIRE list every time)
+            const saveToCloud = async (newPosts) => {
+                setPosts(newPosts); // Optimistic update
+                if (!GOOGLE_SCRIPT_URL.startsWith("http")) return;
+                
+                try {
+                    await fetch(GOOGLE_SCRIPT_URL, {
+                        method: "POST",
+                        body: JSON.stringify(newPosts)
+                    });
+                } catch (err) {
+                    console.error("Save error:", err);
+                    setError("Failed to save changes to cloud.");
+                }
             };
 
-            const exportToCSV = () => {
-                const headers = ['Date', 'Description', 'Platform', 'Type', 'Initiative', 'Status'];
-                const csvRows = posts.map(post => {
-                const safeDescription = `"${post.description.replace(/"/g, '""')}"`;
-                return [post.date, safeDescription, post.platform, post.type, post.initiative, post.status].join(',');
-                });
-                const csvString = [headers.join(','), ...csvRows].join('\n');
-                const blob = new Blob([csvString], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `content_calendar_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            const handleLogin = (e) => {
+                e.preventDefault();
+                if (passwordInput.trim() === TEAM_PASSWORD) {
+                    setIsAuthenticated(true);
+                    setLoginError(false);
+                    sessionStorage.setItem('calendar_auth', 'true');
+                    fetchPosts();
+                } else {
+                    setLoginError(true);
+                }
             };
 
             const year = currentDate.getFullYear();
@@ -169,19 +181,42 @@
             };
 
             const handleDelete = (postId) => {
-                setPosts(prev => prev.filter(p => p.id !== postId));
+                const updatedPosts = posts.filter(p => p.id !== postId);
+                saveToCloud(updatedPosts);
                 setIsModalOpen(false);
             };
 
             const savePost = (formData) => {
+                let updatedPosts;
                 if (editingPost) {
-                    setPosts(prev => prev.map(p => p.id === editingPost.id ? { ...formData, id: p.id } : p));
+                    updatedPosts = posts.map(p => p.id === editingPost.id ? { ...formData, id: p.id } : p);
                 } else {
                     const newPost = { ...formData, id: crypto.randomUUID() };
-                    setPosts(prev => [...prev, newPost]);
+                    updatedPosts = [...posts, newPost];
                 }
+                saveToCloud(updatedPosts);
                 setIsModalOpen(false);
             };
+
+            // --- LOGIN SCREEN ---
+            if (!isAuthenticated) {
+                return (
+                    <div className="flex flex-col items-center justify-center h-screen bg-slate-50 font-sans p-4">
+                        <div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm border border-slate-100 text-center">
+                            <div className="bg-blue-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
+                                <Lock className="w-8 h-8 text-white" />
+                            </div>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Team Access</h2>
+                            <p className="text-slate-500 mb-6 text-sm">Please enter the team password.</p>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Password" className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" autoFocus />
+                                {loginError && <p className="text-red-500 text-xs font-medium">Incorrect password.</p>}
+                                <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md hover:shadow-lg transition-all">Login</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
 
             // --- MAIN CALENDAR RENDER ---
             const renderCalendarDays = () => {
@@ -193,12 +228,9 @@
                     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
                     const dayPosts = posts.filter(p => p.date === dateStr);
                     const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
-
                     days.push(
                         <div key={day} onClick={() => handleDayClick(day)} className={`min-h-[6rem] md:min-h-[8rem] border border-slate-200 p-1 md:p-2 transition-colors hover:bg-slate-50 cursor-pointer overflow-hidden ${isToday ? 'bg-blue-50/50' : 'bg-white'}`}>
-                            <div className="flex justify-between items-start mb-1">
-                                <span className={`text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}`}>{day}</span>
-                            </div>
+                            <div className="flex justify-between items-start mb-1"><span className={`text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}`}>{day}</span></div>
                             <div className="space-y-1">
                                 {dayPosts.map(post => {
                                     const platform = PLATFORMS.find(p => p.id === post.platform) || PLATFORMS[5];
@@ -224,8 +256,8 @@
                         <div className="flex items-center gap-3">
                             <div className="p-2 bg-blue-600 rounded-lg shadow-lg shadow-blue-200"><CalendarIcon className="w-6 h-6 text-white" /></div>
                             <div className="flex flex-col">
-                                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-500 bg-clip-text text-transparent">My Content Calendar</h1>
-                                <span className="text-xs font-medium text-slate-500">Offline Mode</span>
+                                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-500 bg-clip-text text-transparent">Content Calendar</h1>
+                                <span className="text-xs font-medium text-slate-500 flex items-center gap-1"><Cloud className="w-3 h-3"/> Google Sheets Synced</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-4 bg-slate-100 p-1 rounded-lg">
@@ -234,15 +266,12 @@
                             <button onClick={nextMonth} className="p-2 hover:bg-white hover:shadow-sm rounded-md transition-all text-slate-600"><ChevronRight className="w-5 h-5" /></button>
                         </div>
                         <div className="flex gap-2">
-                             <label className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer" title="Load a backup file">
-                                <Upload className="w-4 h-4" /> Load
-                                <input type="file" onChange={importDataFile} className="hidden" accept=".json" />
-                            </label>
-                            <button onClick={exportDataFile} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"><Save className="w-4 h-4" /> Save</button>
-                            <button onClick={exportToCSV} className="hidden md:flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors border border-emerald-200"><Download className="w-4 h-4" /> CSV</button>
-                            <button onClick={goToToday} className="hidden md:block px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">Today</button>
+                             {isLoading && <div className="flex items-center gap-2 px-3 text-sm text-slate-500"><div className="spinner"></div> Syncing...</div>}
+                             <button onClick={fetchPosts} className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"><RefreshCw className="w-4 h-4" /> Refresh</button>
+                             <button onClick={goToToday} className="hidden md:block px-4 py-2 text-sm font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">Today</button>
                         </div>
                     </header>
+                    {error && <div className="bg-red-100 border-b border-red-200 text-red-700 px-4 py-2 text-sm text-center">{error}</div>}
                     <div className="grid grid-cols-7 bg-white border-b border-slate-200 shadow-sm">
                         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <div key={day} className="py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">{day}</div>)}
                     </div>
