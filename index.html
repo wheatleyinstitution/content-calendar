@@ -156,9 +156,8 @@
                         method: "POST",
                         body: JSON.stringify(newPosts)
                     });
-                    // Refresh data after save to ensure sync
-                    // We wait a tiny bit to ensure Google Sheets has finished processing
-                    setTimeout(() => fetchPosts(), 500); 
+                    // Removed the auto-fetch here to prevent the "disappearing post" glitch
+                    // We trust the optimistic update we just did in setPosts(newPosts)
                 } catch (err) {
                     console.error("Save error:", err);
                     setError("Failed to save changes to cloud.");
