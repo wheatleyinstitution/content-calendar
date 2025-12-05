@@ -28,9 +28,9 @@
 
         // --- ⚠️ CONFIGURATION ⚠️ ---
         // 1. Your Google Script Web App URL (Linked to your Sheet)
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyG_RfOudzCLaq-9oIKbejm_yq3_x97tGZGMyO-gbo8Yl04oWDwNlnhChgkKHbRX8_x/exec"; 
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyx9oydgisGW2OFnX1jcQ-MiL08RXH2CGkKWxBsJhy_V_f5682DjvxOCKINWQCoseb-/exec"; 
         
-        // 2. Your Team Password (optional, but good for privacy)
+        // 2. Your Team Password (optional)
         // Leave empty "" to disable password protection
         const TEAM_PASSWORD = "";
 
@@ -118,10 +118,12 @@
                     if (Array.isArray(data)) {
                         setPosts(data);
                         setError(null);
+                    } else if (data.status === "error") {
+                        throw new Error(data.message);
                     }
                 } catch (err) {
                     console.error("Fetch error:", err);
-                    setError("Could not load data from Google Sheets.");
+                    setError("Could not load data from Google Sheets. Check script permissions.");
                 } finally {
                     setIsLoading(false);
                 }
@@ -198,7 +200,7 @@
                 setIsModalOpen(false);
             };
 
-            // --- LOGIN SCREEN ---
+            // --- LOGIN SCREEN (Disabled) ---
             if (!isAuthenticated) {
                 return (
                     <div className="flex flex-col items-center justify-center h-screen bg-slate-50 font-sans p-4">
